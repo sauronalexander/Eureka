@@ -18,7 +18,8 @@ iteration: 1 # how many iterations of Eureka to run
 sample: 3 # number of Eureka samples to generate per iteration
 max_iterations: 3000 # RL Policy training iterations (decrease this to make the feedback loop faster)
 num_eval: 5 # number of evaluation episodes to run for the final reward
-capture_video: False # whether to capture policy rollout videos
+headless: True
+capture_video: True # whether to capture policy rollout videos
 
 # Weights and Biases
 use_wandb: False # whether to use wandb for logging

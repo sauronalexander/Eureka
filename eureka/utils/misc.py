@@ -2,6 +2,9 @@ import subprocess
 import os
 import json
 import logging
+import sys
+import time
+import progressbar
 
 from utils.extract_task_code import file_to_string
 
@@ -30,16 +33,28 @@ def filter_traceback(s):
             return '\n'.join(filtered_lines)
     return ''  # Return an empty string if no Traceback is found
 
-def block_until_training(rl_filepath, log_status=False, iter_num=-1, response_id=-1):
-    # Ensure that the RL training has started before moving on
-    while True:
-        rl_log = file_to_string(rl_filepath)
-        if "fps step:" in rl_log or "Traceback" in rl_log:
-            if log_status and "fps step:" in rl_log:
-                logging.info(f"Iteration {iter_num}: Code Run {response_id} successfully training!")
-            if log_status and "Traceback" in rl_log:
-                logging.info(f"Iteration {iter_num}: Code Run {response_id} execution error!")
-            break
+
+def get_current_status(rl_log):
+    if "Traceback" in rl_log:
+        return -1
+    if "MAX EPOCHS NUM!" in rl_log:
+        return 100.0
+    if len(rl_log) > 2:
+        last_line = rl_log.split('\n')[-2]
+        if "fps step" in last_line:
+            status = last_line[last_line.find('epoch'):last_line.find('frames')].split(' ')[1].split('/')
+            return float(status[0]) / float(status[1]) * 100.0
+    return 0
+
+
+def extract_stacktrace(rl_log):
+    start_idx = rl_log.find("RuntimeError:")
+    end_idx = rl_log.rfind("Traceback")
+    if start_idx > end_idx:
+        return rl_log[start_idx:]
+    else:
+        return rl_log[start_idx:end_idx]
+
 
 if __name__ == "__main__":
     print(get_freest_gpu())

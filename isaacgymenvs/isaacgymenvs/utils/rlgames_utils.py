@@ -26,6 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import os
+import logging
 from collections import deque
 from typing import Callable, Dict, Tuple, Any
 
@@ -108,16 +109,17 @@ def get_rlgames_env_creator(
         else:
             _sim_device = sim_device
             _rl_device = rl_device
-            
+
         try:
             # task_caller = import_class_from_file(env_path, task_name)
             import importlib
-            module_name = f"isaacgymenvs.tasks.{task_config['env']['env_name'].lower()}"
+            module_name = os.getenv("EUREKA_TASK_CODE_MODULE")
+            module_name = f"isaacgymenvs.tasks.{module_name}"
+            logging.info(f"Training using module {module_name}")
             module = importlib.import_module(module_name)
             task_caller = getattr(module, task_name)
         except:
             task_caller = isaacgym_task_map[task_name]
-        
         env = task_caller(
             cfg=task_config,
             rl_device=_rl_device,

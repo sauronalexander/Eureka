@@ -1,9 +1,12 @@
-import re 
+import re
+import ast
+
 
 def file_to_string(filename):
     with open(filename, 'r') as file:
         return file.read()
-    
+
+
 def extract_task_code(filename):
     in_code = False
     in_task = False
@@ -33,6 +36,7 @@ def extract_task_code(filename):
                 reward_string += line    
     return task_string, reward_string
 
+
 def extract_observation_code(filename):
     with open(filename, 'r') as f:
         lines = f.readlines()
@@ -51,6 +55,7 @@ def extract_observation_code(filename):
                 function_started = False
 
     return function_code
+
 
 def extract_observation_functions(filename, task='ant'):
     with open(filename, 'r') as f:
@@ -81,7 +86,6 @@ def extract_observation_functions(filename, task='ant'):
 
     return '\n'.join(functions)
 
-import ast
 
 def get_function_signature(code_string):
     # Parse the code string into an AST

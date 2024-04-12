@@ -5,7 +5,7 @@ INSTALL_REQUIRES = [
     "charset-normalizer",
     "matplotlib",
     "openai",
-    'torch<=2.0.0',
+    'torch==2.2.1',
     'numpy==1.20.0',
     'ray>=1.1.0',
     'tensorboard>=1.14.0',
@@ -18,6 +18,7 @@ INSTALL_REQUIRES = [
     "termcolor",
     "hydra-core>=1.1",
     "pyvirtualdisplay",
+    "imageio-ffmpeg",
 ]
 
 # Installation operation

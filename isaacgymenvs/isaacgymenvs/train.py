@@ -94,7 +94,7 @@ def launch_rlg_hydra(cfg: DictConfig):
     if cfg.checkpoint:
         cfg.checkpoint = to_absolute_path(cfg.checkpoint)
 
-    cfg_dict = omegaconf_to_dict(cfg)
+    # cfg_dict = omegaconf_to_dict(cfg)
     # print_dict(cfg_dict)
 
     # set numpy formatting for printing only
@@ -203,7 +203,7 @@ def launch_rlg_hydra(cfg: DictConfig):
     statistics = runner.run({
         'train': not cfg.test,
         'play': cfg.test,
-        'checkpoint' : cfg.checkpoint,
+        'checkpoint': cfg.checkpoint,
         'sigma': cfg.sigma if cfg.sigma != '' else None
     })
 

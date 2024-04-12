@@ -4,7 +4,9 @@ import json
 import logging 
 import matplotlib.pyplot as plt
 import os
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 import re
 import subprocess
 from pathlib import Path
@@ -12,7 +14,7 @@ import shutil
 import time 
 
 from utils.misc import * 
-from utils.file_utils import find_files_with_substring, load_tensorboard_logs
+from utils.file_utils import find_files_with_substring, load_tensorboard_logs, create_env_file
 from utils.create_task import create_task
 from utils.extract_task_code import *
 
@@ -24,8 +26,6 @@ def main(cfg):
     workspace_dir = Path.cwd()
     logging.info(f"Workspace: {workspace_dir}")
     logging.info(f"Project Root: {EUREKA_ROOT_DIR}")
-
-    openai.api_key = os.getenv("OPENAI_API_KEY")
 
     task = cfg.env.task
     task_description = cfg.env.description
@@ -88,7 +88,7 @@ def main(cfg):
                 break
             for attempt in range(1000):
                 try:
-                    response_cur = openai.ChatCompletion.create(
+                    response_cur = client.chat.completions.create(
                         model=model,
                         messages=messages,
                         temperature=cfg.temperature,
@@ -105,7 +105,7 @@ def main(cfg):
             if response_cur is None:
                 logging.info("Code terminated due to too many failed attempts!")
                 exit()
-
+            response_cur = response_cur.model_dump()
             responses.extend(response_cur["choices"])
             prompt_tokens = response_cur["usage"]["prompt_tokens"]
             total_completion_token += response_cur["usage"]["completion_tokens"]
@@ -205,19 +205,19 @@ def main(cfg):
         successes = []
         reward_correlations = []
         code_paths = []
-        
-        exec_success = False 
+
+        exec_success = False
         for response_id, (code_run, rl_run) in enumerate(zip(code_runs, rl_runs)):
             rl_run.communicate()
             rl_filepath = f"env_iter{iter}_response{response_id}.txt"
             code_paths.append(f"env_iter{iter}_response{response_id}.py")
             try:
                 with open(rl_filepath, 'r') as f:
-                    stdout_str = f.read() 
-            except: 
+                    stdout_str = f.read()
+            except:
                 content = execution_error_feedback.format(traceback_msg="Code Run cannot be executed due to function signature error! Please re-write an entirely new reward function!")
                 content += code_output_tip
-                contents.append(content) 
+                contents.append(content)
                 successes.append(DUMMY_FAILURE)
                 reward_correlations.append(DUMMY_FAILURE)
                 continue
@@ -231,14 +231,14 @@ def main(cfg):
                 lines = stdout_str.split('\n')
                 for i, line in enumerate(lines):
                     if line.startswith('Tensorboard Directory:'):
-                        break 
-                tensorboard_logdir = line.split(':')[-1].strip() 
+                        break
+                tensorboard_logdir = line.split(':')[-1].strip()
                 tensorboard_logs = load_tensorboard_logs(tensorboard_logdir)
                 max_iterations = np.array(tensorboard_logs['gt_reward']).shape[0]
                 epoch_freq = max(int(max_iterations // 10), 1)
-                
+
                 content += policy_feedback.format(epoch_freq=epoch_freq)
-                
+
                 # Compute Correlation between Human-Engineered and GPT Rewards
                 if "gt_reward" in tensorboard_logs and "gpt_reward" in tensorboard_logs:
                     gt_reward = np.array(tensorboard_logs["gt_reward"])
@@ -257,16 +257,16 @@ def main(cfg):
                         metric_cur_min = min(tensorboard_logs[metric])
                         if metric != "gt_reward" and metric != "gpt_reward":
                             if metric != "consecutive_successes":
-                                metric_name = metric 
+                                metric_name = metric
                             else:
                                 metric_name = "task_score"
-                            content += f"{metric_name}: {metric_cur}, Max: {metric_cur_max:.2f}, Mean: {metric_cur_mean:.2f}, Min: {metric_cur_min:.2f} \n"                    
+                            content += f"{metric_name}: {metric_cur}, Max: {metric_cur_max:.2f}, Mean: {metric_cur_mean:.2f}, Min: {metric_cur_min:.2f} \n"
                         else:
                             # Provide ground-truth score when success rate not applicable
                             if "consecutive_successes" not in tensorboard_logs:
-                                content += f"ground-truth score: {metric_cur}, Max: {metric_cur_max:.2f}, Mean: {metric_cur_mean:.2f}, Min: {metric_cur_min:.2f} \n"                    
+                                content += f"ground-truth score: {metric_cur}, Max: {metric_cur_max:.2f}, Mean: {metric_cur_mean:.2f}, Min: {metric_cur_min:.2f} \n"
                 code_feedbacks.append(code_feedback)
-                content += code_feedback  
+                content += code_feedback
             else:
                 # Otherwise, provide execution traceback error feedback
                 successes.append(DUMMY_FAILURE)
@@ -274,8 +274,8 @@ def main(cfg):
                 content += execution_error_feedback.format(traceback_msg=traceback_msg)
 
             content += code_output_tip
-            contents.append(content) 
-        
+            contents.append(content)
+
         # Repeat the iteration if all code generation failed
         if not exec_success and cfg.sample != 1:
             execute_rates.append(0.)
@@ -288,7 +288,7 @@ def main(cfg):
         # Select the best code sample based on the success rate
         best_sample_idx = np.argmax(np.array(successes))
         best_content = contents[best_sample_idx]
-            
+
         max_success = successes[best_sample_idx]
         max_success_reward_correlation = reward_correlations[best_sample_idx]
         execute_rate = np.sum(np.array(successes) >= 0.) / cfg.sample
@@ -308,7 +308,7 @@ def main(cfg):
         logging.info(f"Iteration {iter}: Best Generation ID: {best_sample_idx}")
         logging.info(f"Iteration {iter}: GPT Output Content:\n" +  responses[best_sample_idx]["message"]["content"] + "\n")
         logging.info(f"Iteration {iter}: User Content:\n" + best_content + "\n")
-            
+
         # Plot the success rate
         fig, axs = plt.subplots(2, figsize=(6, 6))
         fig.suptitle(f'{cfg.env.task}')
@@ -338,24 +338,24 @@ def main(cfg):
         # Save dictionary as JSON file
         with open('messages.json', 'w') as file:
             json.dump(messages, file, indent=4)
-    
+
     # Evaluate the best reward code many times
-    if max_reward_code_path is None: 
+    if max_reward_code_path is None:
         logging.info("All iterations of code generation failed, aborting...")
         logging.info("Please double check the output env_iter*_response*.txt files for repeating errors!")
         exit()
     logging.info(f"Task: {task}, Max Training Success {max_success_overall}, Correlation {max_success_reward_correlation_overall}, Best Reward Code Path: {max_reward_code_path}")
     logging.info(f"Evaluating best reward code {cfg.num_eval} times")
     shutil.copy(max_reward_code_path, output_file)
-    
+
     eval_runs = []
     for i in range(cfg.num_eval):
         set_freest_gpu()
-        
+
         # Execute the python file with flags
         rl_filepath = f"reward_code_eval{i}.txt"
         with open(rl_filepath, 'w') as f:
-            process = subprocess.Popen(['python', '-u', f'{ISAAC_ROOT_DIR}/train.py',  
+            process = subprocess.Popen(['python', '-u', f'{ISAAC_ROOT_DIR}/train.py',
                                         'hydra/output=subprocess',
                                         f'task={task}{suffix}', f'wandb_activate={cfg.use_wandb}',
                                         f'wandb_entity={cfg.wandb_username}', f'wandb_project={cfg.wandb_project}',
@@ -363,7 +363,7 @@ def main(cfg):
                                         ],
                                         stdout=f, stderr=f)
 
-        block_until_training(rl_filepath)
+        block_until_training(rl_filepath, False, "final_evaluation", i)
         eval_runs.append(process)
 
     reward_code_final_successes = []
@@ -372,12 +372,12 @@ def main(cfg):
         rl_run.communicate()
         rl_filepath = f"reward_code_eval{i}.txt"
         with open(rl_filepath, 'r') as f:
-            stdout_str = f.read() 
+            stdout_str = f.read()
         lines = stdout_str.split('\n')
         for i, line in enumerate(lines):
             if line.startswith('Tensorboard Directory:'):
-                break 
-        tensorboard_logdir = line.split(':')[-1].strip() 
+                break
+        tensorboard_logdir = line.split(':')[-1].strip()
         tensorboard_logs = load_tensorboard_logs(tensorboard_logdir)
         max_success = max(tensorboard_logs['consecutive_successes'])
         reward_code_final_successes.append(max_success)
