@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-s3-access
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::126634536477:role/addf-demo-eks-dcv-role
+automountServiceAccountToken: true
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: anaconda-daemonset
+  labels:
+    app: anaconda-setup
+spec:
+  selector:
+    matchLabels:
+      app: anaconda-setup
+  template:
+    metadata:
+      labels:
+        app: anaconda-setup
+    spec:
+      terminationGracePeriodSeconds: 30 # Set the termination grace period
+      serviceAccountName: aws-s3-access
+      automountServiceAccountToken: true
+      containers:
+      - name: anaconda-setup-container
+        image: 126634536477.dkr.ecr.us-east-2.amazonaws.com/addf-eks-demo:ubuntu-desktop
+        resources:
+          limits:
+            nvidia.com/gpu: 1 # requesting 3 GPU, 1 shared gpu is 3GB in g5
+        securityContext:
+          privileged: true
+          allowPrivilegeEscalation: true
+          capabilities:
+            add:
+              - ALL
+        imagePullPolicy: "Always"
+        command: ["/bin/bash", "-c", "/usr/local/bin/conda_setup.sh"]
+        volumeMounts:
+          - name: anaconda3
+            mountPath: /opt/python_env
+          - name: fsx
+            mountPath: /mnt/fsx
+            readOnly: False
+        readinessProbe:
+          exec:
+            command:
+              - /usr/local/bin/check_healthy.sh
+          initialDelaySeconds: 0
+          periodSeconds: 5
+      volumes:
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: anaconda3
+          hostPath:
+            path: "/var/addf/anaconda3"

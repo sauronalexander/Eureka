@@ -407,7 +407,8 @@ def main(cfg):
     sys.stderr.flush()
 
     progressbars = [
-        tqdm(total=100,
+        tqdm(total=100,:wq
+
              file=sys.stdout,
              position=i + 1,
              desc=f"Progress of {i}th final training sample") for i in range(len(rl_files))]
