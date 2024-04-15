@@ -179,7 +179,7 @@ def main(cfg):
                     "EUREKA_TASK_CODE_MODULE": cur_env_name,
                     "EUREKA_LOG_PATH": os.path.join(workspace_dir, rl_filepath),
                     "EUREKA_CMD": f'"{command}"',
-                    "EUREKA_CLEANUP": f'"rm -rf /mnt/fsx/addf-dcv-demo-us-east-2/Eureka/isaacgymenvs/isaacgymenvs/tasks/{cur_env_name}.py"'
+                    "EUREKA_CLEANUP": f'"rm -rf {EUREKA_ROOT_DIR}/isaacgymenvs/isaacgymenvs/tasks/{cur_env_name}.py"'
                 })
                 logging.info(f"Training input has been written to file {input_file_path}")
                 set_message_to_training_queue(input_file_path)
@@ -407,8 +407,7 @@ def main(cfg):
     sys.stderr.flush()
 
     progressbars = [
-        tqdm(total=100,:wq
-
+        tqdm(total=100,
              file=sys.stdout,
              position=i + 1,
              desc=f"Progress of {i}th final training sample") for i in range(len(rl_files))]

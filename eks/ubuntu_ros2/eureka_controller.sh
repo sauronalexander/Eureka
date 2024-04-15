@@ -18,7 +18,7 @@ conda init bash
 conda activate eureka
 cp /opt/python_env/anaconda3/envs/eureka/lib/libpython3.8.so.1.0 /usr/lib
 
-cd /mnt/fsx/addf-dcv-demo-us-east-2/Eureka/eureka
+cd /mnt/fsx/ns1/addf-dcv-demo-us-east-2/Eureka/eureka
 mkdir -p env_files
 #python eureka.py env=shadow_hand sample=4 iteration=2 model=gpt-4
 python eureka_distributed.py \
