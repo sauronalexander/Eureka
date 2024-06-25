@@ -8,7 +8,8 @@ import copy
 import boto3
 from .llm_client import LLMClient, LLMClientType
 
-BEDROCK_REGION = 'us-east-1'
+BEDROCK_DEFAULT_REGION = 'us-east-1'
+BEDROCK_ALT_REGION = 'us-west-2'
 CONTENT_TYPE = ACCEPT = 'application/json'
 BODY_TEMPLATE = {
     "anthropic_version": "bedrock-2023-05-31",
@@ -50,17 +51,23 @@ class ClaudeClient(LLMClient):
             task_obs_code_string,
             task_description
         )
+        self.region = BEDROCK_DEFAULT_REGION
         if model == "claude-3-sonnet":
             self.model_name = "Claude 3 Sonnet"
         elif model == "claude-3-haiku":
             self.model_name = "Claude 3 Haiku"
+        elif model == "claude-3-opus":
+            self.model_name = "Claude 3 Opus"
+            self.region = BEDROCK_ALT_REGION
+        elif model == "Claude-3-5-sonnet":
+            self.model_name = "Claude 3.5 Sonnet"
         else:
             logging.fatal(f"{model} does not exist")
             assert False
-        self.model_id = self.get_model_id(self.model_name)
+        self.model_id = self.get_model_id(self.model_name, self.region)
         self.bedrock = boto3.client(
             service_name="bedrock-runtime",
-            region_name=BEDROCK_REGION
+            region_name=self.region
         )
         self.system_prompt = self.initial_system
         self.messages = [
@@ -68,12 +75,12 @@ class ClaudeClient(LLMClient):
         ]
 
     @staticmethod
-    def get_model_id(model_name):
+    def get_model_id(model_name, region):
         logging.info(f"Finding {model_name} in Bedrock Foundation Models")
-        bedrock = boto3.client(service_name="bedrock", region_name=BEDROCK_REGION)
+        bedrock = boto3.client(service_name="bedrock", region_name=region)
         response = bedrock.list_foundation_models(byProvider='Anthropic')
         for model in response['modelSummaries']:
-            if model["modelName"] == model_name:
+            if model["modelName"] == model_name and model['modelId'][-5:] == "-v1:0":
                 logging.info(f"Found model {model_name} with id " + model["modelId"])
                 return model["modelId"]
         logging.fatal(f"{model_name} does not exist")
