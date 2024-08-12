@@ -1,13 +1,16 @@
+import sys
+import time
+import logging
 import hydra
 import numpy as np
 import matplotlib.pyplot as plt
 
 from pathlib import Path
 import shutil
-from tqdm import tqdm
 
 from utils.llm_clients.chatgpt import ChatGPTClient
 from utils.llm_clients.claude import ClaudeClient
+from utils.llm_clients.llama import LlamaClient
 from utils.misc import *
 from utils.file_utils import load_tensorboard_logs, create_env_file
 from utils.create_task import create_task
@@ -33,7 +36,13 @@ def main(cfg):
     logging.info("Task description: " + task_description)
 
     env_name = cfg.env.env_name.lower()
-    env_parent = 'isaac' if f'{env_name}.py' in os.listdir(f'{EUREKA_ROOT_DIR}/envs/isaac') else 'dexterity'
+    target_dir = f"{EUREKA_ROOT_DIR}/envs/isaac/"
+    file_paths = []
+    for dirpath, dirnames, filenames in os.walk(target_dir):
+        for filename in filenames:
+            file_paths.append(os.path.relpath(os.path.join(dirpath, filename), target_dir))
+    env_parent = 'isaac' if f'{env_name}.py' in file_paths else 'dexterity'
+
     task_file = f'{EUREKA_ROOT_DIR}/envs/{env_parent}/{env_name}.py'
     task_obs_file = f'{EUREKA_ROOT_DIR}/envs/{env_parent}/{env_name}_obs.py'
     shutil.copy(task_obs_file, f"env_init_obs.py")
@@ -71,7 +80,7 @@ def main(cfg):
             task_obs_code_string=task_obs_code_string,
             task_description=task_description
         )
-    else:
+    elif "claude" in model:
         client = ClaudeClient(
             model=model,
             prompt_dir=prompt_dir,
@@ -80,6 +89,18 @@ def main(cfg):
             task_obs_code_string=task_obs_code_string,
             task_description=task_description
         )
+    elif "llama" in model:
+        client = LlamaClient(
+            model=model,
+            prompt_dir=prompt_dir,
+            reward_signature=reward_signature,
+            code_output_tip=code_output_tip,
+            task_obs_code_string=task_obs_code_string,
+            task_description=task_description
+        )
+    else:
+        logging.fatal(f"Model {model} not supported")
+        sys.exit(1)
 
     # Eureka generation loop
     for iter in range(cfg.iteration):
@@ -92,6 +113,7 @@ def main(cfg):
 
         code_runs = []
         rl_runs = []
+        done = []
         for response_id in range(cfg.sample):
             response_cur = client.responses[response_id]
             logging.info(f"Iteration {iter}: Processing Code Run {response_id}")
@@ -123,6 +145,7 @@ def main(cfg):
                 gpt_reward_signature, input_lst = get_function_signature(code_string)
             except Exception as e:
                 logging.info(f"Iteration {iter}: Code Run {response_id} cannot parse function signature!")
+                done.append(response_id)
                 continue
 
             code_runs.append(code_string)
@@ -193,20 +216,9 @@ def main(cfg):
         code_paths = []
 
         exec_success = False
-        done = []
-
-        error_info = [""] * 4
+        error_info = [""] * cfg.sample
 
         logging.info(f"Checking progress for Iteration {iter} for {cfg.max_iterations} steps")
-        sys.stdout.flush()
-        sys.stderr.flush()
-
-        progressbars = [
-            tqdm(total=100,
-                 file=sys.stdout,
-                 position=i + 1,
-                 desc=f"Progress of {i}th training sample") for i in range(cfg.sample)]
-        sys.stdout.flush()
         while len(done) < cfg.sample:
             for (response_id, rl_filepath) in rl_runs:
                 if response_id in done:
@@ -214,18 +226,15 @@ def main(cfg):
                 rl_log = file_to_string(rl_filepath)
                 cur_step = get_current_status(rl_log)
                 if cur_step == -1:
-                    tqdm.write(f"Training of {response_id}th sample has failed")
+                    logging.error(f"Training of {response_id}th sample has failed")
                     error_info[response_id] = rl_log
                     done.append(response_id)
                 elif cur_step == 100.0:
-                    tqdm.write(f"Training of {response_id}th sample succeeded")
+                    logging.info(f"Training of {response_id}th sample succeeded")
                     done.append(response_id)
                 elif cur_step > 0:
-                    progressbars[response_id].update(cur_step)
-            time.sleep(30)
-
-        sys.stdout.flush()
-        sys.stderr.flush()
+                    logging.info(f"Sample {response_id} progress: {cur_step}%")
+            time.sleep(120)
 
         for i, error in enumerate(error_info):
             if len(error) > 0:
@@ -262,6 +271,7 @@ def main(cfg):
                 tensorboard_logdir = line.split(':')[-1].strip()
                 tensorboard_logs = load_tensorboard_logs(tensorboard_logdir)
                 max_iterations = np.array(tensorboard_logs['gt_reward']).shape[0]
+                logging.info(f"Human reward max iteration: {max_iterations}")
                 epoch_freq = max(int(max_iterations // 10), 1)
 
                 content += policy_feedback.format(epoch_freq=epoch_freq)
@@ -356,7 +366,6 @@ def main(cfg):
         plt.savefig('summary.png')
         np.savez('summary.npz', max_successes=max_successes, execute_rates=execute_rates, best_code_paths=best_code_paths,
                  max_successes_reward_correlation=max_successes_reward_correlation)
-
         client.add_assistant_prompt(client.responses[best_sample_idx], best_content)
 
         # Save dictionary as JSON file
@@ -403,15 +412,6 @@ def main(cfg):
     reward_code_correlations_final = []
     done = []
     logging.info(f"Checking progress for Final Training")
-    sys.stdout.flush()
-    sys.stderr.flush()
-
-    progressbars = [
-        tqdm(total=100,
-             file=sys.stdout,
-             position=i + 1,
-             desc=f"Progress of {i}th final training sample") for i in range(len(rl_files))]
-    sys.stdout.flush()
 
     while len(done) < len(rl_files):
         for i, rl_filepath in enumerate(rl_files):
@@ -420,18 +420,15 @@ def main(cfg):
             rl_log = file_to_string(rl_filepath)
             cur_step = get_current_status(rl_log)
             if cur_step == -1.0:
-                tqdm.write(f"Training of {i}th sample failed")
-                tqdm.write(rl_log)
+                logging.error(f"Training of {i}th sample failed")
+                logging.error(rl_log)
                 done.append(i)
             elif cur_step == 100.0:
-                tqdm.write(f"Training of {i}th sample succeeded")
+                logging.info(f"Training of {i}th sample succeeded")
                 done.append(i)
             elif cur_step > 0:
-                progressbars[i].update(cur_step)
-        time.sleep(30)
-
-    sys.stdout.flush()
-    sys.stderr.flush()
+                logging.info(f"Training of {i}th progress: {cur_step}%")
+        time.sleep(300)
 
     for i, rl_filepath in enumerate(rl_files):
         with open(rl_filepath, 'r') as f:
@@ -459,3 +456,4 @@ def main(cfg):
 
 if __name__ == "__main__":
     main()
+    # python3 train.py task=Humanoid checkpoint=/tmp/nn/HumanoidGPT.pth test=True num_envs=64 headless=False force_render=True

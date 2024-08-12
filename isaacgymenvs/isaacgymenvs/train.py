@@ -74,6 +74,8 @@ def preprocess_train_config(cfg, config_dict):
 
 @hydra.main(config_name="config", config_path="./cfg")
 def launch_rlg_hydra(cfg: DictConfig):
+    workspace_dir = Path.cwd()
+    print(f"Workspace: {workspace_dir}")
 
     from isaacgymenvs.utils.rlgames_utils import RLGPUEnv, RLGPUAlgoObserver, MultiObserver, ComplexObsRLGPUEnv
     from isaacgymenvs.utils.wandb_utils import WandbAlgoObserver
@@ -144,19 +146,23 @@ def launch_rlg_hydra(cfg: DictConfig):
         'vecenv_type': 'RLGPU',
         'env_creator': lambda **kwargs: create_isaacgym_env(**kwargs),
     })
-    
+
     # Save the environment code!
     try:
-        output_file = f"{ROOT_DIR}/tasks/{cfg.task.env.env_name.lower()}.py"
-        shutil.copy(output_file, f"env.py")
+        cur_env_name = os.getenv("EUREKA_TASK_CODE_MODULE")
+        output_file = f"{ROOT_DIR}/tasks/{cur_env_name}.py"
+        target_file_name = f"{cur_env_name}.py"
+        os.makedirs(os.path.dirname(target_file_name), exist_ok=True)
+        shutil.copy(output_file, target_file_name)
     except:
         import re
         def camel_to_snake(name):
             s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
             return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
         output_file = f"{ROOT_DIR}/tasks/{camel_to_snake(cfg.task.name)}.py"
-
-        shutil.copy(output_file, f"env.py")
+        target_file_name = f"{camel_to_snake(cfg.task.name)}.py"
+        os.makedirs(os.path.dirname(target_file_name), exist_ok=True)
+        shutil.copy(output_file, target_file_name)
 
     vecenv.register('RLGPU', lambda config_name, num_actors, **kwargs: RLGPUEnv(config_name, num_actors, **kwargs))
 

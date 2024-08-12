@@ -35,6 +35,7 @@ class ChatGPTClient(LLMClient):
         total_token = 0
         prompt_tokens = 0
         total_completion_token = 0
+        self.responses = []
         chunk_size = sample_count if "gpt-3.5" in self.model else 4
         while total_samples < sample_count:
             for attempt in range(1000):

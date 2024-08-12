@@ -1,16 +1,13 @@
-import os
 import logging
-import time
-import json
-
 import copy
+import sys
 
-import boto3
-from .llm_client import LLMClient, LLMClientType
+from .llm_client import LLMClientType
+from .bedrock_client import BedrockClient, BEDROCK_DEFAULT_REGION
 
-BEDROCK_DEFAULT_REGION = 'us-east-1'
+PROVIDER = "Anthropic"
 BEDROCK_ALT_REGION = 'us-west-2'
-CONTENT_TYPE = ACCEPT = 'application/json'
+
 BODY_TEMPLATE = {
     "anthropic_version": "bedrock-2023-05-31",
     "max_tokens": 4096,
@@ -31,9 +28,10 @@ BODY_TEMPLATE = {
     # "top_k": int,
     # "stop_sequences": [string]
 }
+DELAY = 5
 
 
-class ClaudeClient(LLMClient):
+class ClaudeClient(BedrockClient):
     def __init__(
         self,
         model,
@@ -43,77 +41,44 @@ class ClaudeClient(LLMClient):
         task_obs_code_string,
         task_description
     ):
+        region = BEDROCK_DEFAULT_REGION
+        if model == "claude-3-sonnet":
+            model_name = "Claude 3 Sonnet"
+        elif model == "claude-3-haiku":
+            model_name = "Claude 3 Haiku"
+        elif model == "claude-3-opus":
+            model_name = "Claude 3 Opus"
+            region = BEDROCK_ALT_REGION
+        elif model == "claude-3-5-sonnet":
+            model_name = "Claude 3.5 Sonnet"
+        else:
+            logging.fatal(f"{model} does not exist")
+            sys.exit(1)
         super().__init__(
             LLMClientType.CLAUDE,
             prompt_dir,
             reward_signature,
             code_output_tip,
             task_obs_code_string,
-            task_description
+            task_description,
+            PROVIDER,
+            region,
+            DELAY
         )
-        self.region = BEDROCK_DEFAULT_REGION
-        if model == "claude-3-sonnet":
-            self.model_name = "Claude 3 Sonnet"
-        elif model == "claude-3-haiku":
-            self.model_name = "Claude 3 Haiku"
-        elif model == "claude-3-opus":
-            self.model_name = "Claude 3 Opus"
-            self.region = BEDROCK_ALT_REGION
-        elif model == "Claude-3-5-sonnet":
-            self.model_name = "Claude 3.5 Sonnet"
-        else:
-            logging.fatal(f"{model} does not exist")
-            assert False
-        self.model_id = self.get_model_id(self.model_name, self.region)
-        self.bedrock = boto3.client(
-            service_name="bedrock-runtime",
-            region_name=self.region
-        )
-        self.system_prompt = self.initial_system
-        self.messages = [
-            {"role": "user", "content": self.initial_user}
-        ]
+        self.get_model_id(model_name)
 
-    @staticmethod
-    def get_model_id(model_name, region):
-        logging.info(f"Finding {model_name} in Bedrock Foundation Models")
-        bedrock = boto3.client(service_name="bedrock", region_name=region)
-        response = bedrock.list_foundation_models(byProvider='Anthropic')
-        for model in response['modelSummaries']:
-            if model["modelName"] == model_name and model['modelId'][-5:] == "-v1:0":
-                logging.info(f"Found model {model_name} with id " + model["modelId"])
-                return model["modelId"]
-        logging.fatal(f"{model_name} does not exist")
-        assert False
-
-    def generate_response(self, iter, sample_count, temperature):
+    def generate_response(self, iteration, sample_count, temperature):
         body = copy.deepcopy(BODY_TEMPLATE)
         body["system"] = self.system_prompt
         body["temperature"] = temperature
         body["messages"] = self.messages
-        total_samples = 0
+        responses = self._generate_response(body, sample_count)
+        self.responses = [x['content'][0]['text'] for x in responses]
         total_token = 0
         total_completion_token = 0
         prompt_tokens = 0
-        while total_samples < sample_count:
-            try:
-                response = self.bedrock.invoke_model(
-                    body=json.dumps(body),
-                    modelId=self.model_id,
-                    accept=ACCEPT,
-                    contentType=CONTENT_TYPE
-                )
-                response_body = json.loads(response.get('body').read())
-                self.responses += [response_body['content'][0]['text']]
-                total_samples += 1
-                total_token += response_body["usage"]["input_tokens"] + response_body["usage"]["output_tokens"]
-                total_completion_token += response_body["usage"]["output_tokens"]
-                prompt_tokens += response_body["usage"]["input_tokens"]
-                print(f"Prompt {total_samples - 1} completed from {self.model_name}")
-            except Exception as e:
-                logging.warning("Code generation failed due to ", e)
-
-        logging.info(f"Iteration {iter}: Prompt Tokens: {prompt_tokens}, Completion Tokens: {total_completion_token}, Total Tokens: {total_token}")
-
-    def get_messages(self):
-        return [{"role": "system", "content": self.system_prompt}] + self.messages
+        for response in responses:
+            total_token += response["usage"]["input_tokens"] + response["usage"]["output_tokens"]
+            total_completion_token += response["usage"]["output_tokens"]
+            prompt_tokens += response["usage"]["input_tokens"]
+        logging.info(f"Iteration {iteration}: Prompt Tokens: {prompt_tokens}, Completion Tokens: {total_completion_token}, Total Tokens: {total_token}")

@@ -1,16 +1,12 @@
 import subprocess
 import os
 import json
-import logging
-import sys
-import time
-import progressbar
 
-from utils.extract_task_code import file_to_string
 
 def set_freest_gpu():
     freest_gpu = get_freest_gpu()
     os.environ['CUDA_VISIBLE_DEVICES'] = str(freest_gpu)
+
 
 def get_freest_gpu():
     sp = subprocess.Popen(['gpustat', '--json'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -20,6 +16,7 @@ def get_freest_gpu():
     freest_gpu = min(gpustats['gpus'], key=lambda x: x['memory.used'])
 
     return freest_gpu['index']
+
 
 def filter_traceback(s):
     lines = s.split('\n')
@@ -43,7 +40,7 @@ def get_current_status(rl_log):
         last_line = rl_log.split('\n')[-2]
         if "fps step" in last_line:
             status = last_line[last_line.find('epoch'):last_line.find('frames')].split(' ')[1].split('/')
-            return float(status[0]) / float(status[1]) * 100.0
+            return round(float(status[0]) / float(status[1]) * 10000.0) / 100.0
     return 0
 
 

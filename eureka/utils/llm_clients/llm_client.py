@@ -4,6 +4,7 @@ from enum import Enum
 class LLMClientType(Enum):
     CHAT_GPT = 1
     CLAUDE = 2
+    LLAMA = 3
 
 
 class LLMClient:

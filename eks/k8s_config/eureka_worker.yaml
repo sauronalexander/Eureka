@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-access
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::126634536477:role/addf-eureka-simulation-role
+automountServiceAccountToken: true
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: eureka-worker
+  labels:
+    app: eureka-worker
+spec:
+  replicas: 8
+  selector:
+    matchLabels:
+      app: eureka-worker
+  template:
+    metadata:
+      labels:
+        app: eureka-worker
+    spec:
+      restartPolicy: Always
+      serviceAccountName: aws-access
+      automountServiceAccountToken: true
+      containers:
+        - name: eureka-container
+          image: 126634536477.dkr.ecr.us-east-2.amazonaws.com/addf-eureka-storage-robotic-applications-ecr:ubuntu-ros2
+          securityContext:
+            privileged: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - ALL
+          imagePullPolicy: "Always"
+          resources:
+            limits:
+              nvidia.com/gpu: 10 # requesting 10 GPU, 1 shared gpu is 1GB in g5
+          command: ["/bin/bash", "-c", "/usr/local/bin/eureka_worker.sh"]
+          env:
+            - name: DISPLAY
+              value: ":0"
+            - name: EUREKA_TRAINING_QUEUE_URL
+              value: "https://sqs.us-east-2.amazonaws.com/126634536477/eureka-msg-queue"
+          volumeMounts:
+            - name: socket-volume
+              mountPath: /tmp/.X11-unix
+              readOnly: False
+            - name: fsx
+              mountPath: /mnt/fsx
+              readOnly: False
+            - name: anaconda3
+              mountPath: /opt/python_env
+          readinessProbe:
+            exec:
+              command:
+                - /usr/local/bin/check_healthy.sh
+            initialDelaySeconds: 0
+            periodSeconds: 5
+      volumes:
+        - name: socket-volume
+          hostPath:
+            path: "/var/addf/dcv-eks/sockets"
+        - name: fsx
+          persistentVolumeClaim:
+            claimName: fsx-claim
+        - name: anaconda3
+          hostPath:
+            path: "/var/addf/anaconda3"

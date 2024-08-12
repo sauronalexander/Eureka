@@ -182,7 +182,6 @@ if __name__ == "__main__":
 
     CURRENT_DIR = os.getcwd()
     ISAAC_ROOT_DIR = f"{CURRENT_DIR}/../../isaacgymenvs/isaacgymenvs"
-
     # Create base environment file to write reward function for
     modify_python_file(reward_name, f"{ISAAC_ROOT_DIR}/tasks/{task}.py", f"../envs/isaac/{task}.py")
     

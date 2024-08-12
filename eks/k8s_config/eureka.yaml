@@ -1,79 +1,7 @@
 apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: aws-access
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::126634536477:role/addf-demo-eks-dcv-role
-automountServiceAccountToken: true
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: eureka-worker
-  labels:
-    app: eureka-worker
-spec:
-  replicas: 4
-  selector:
-    matchLabels:
-      app: eureka-worker
-  template:
-    metadata:
-      labels:
-        app: eureka-worker
-    spec:
-      restartPolicy: Always
-      serviceAccountName: aws-access
-      automountServiceAccountToken: true
-      containers:
-        - name: eureka-container
-          image: 126634536477.dkr.ecr.us-east-2.amazonaws.com/addf-eks-demo:ubuntu-desktop
-          securityContext:
-            privileged: true
-            allowPrivilegeEscalation: true
-            capabilities:
-              add:
-                - ALL
-          imagePullPolicy: "Always"
-          resources:
-            limits:
-              nvidia.com/gpu: 2 # requesting 3 GPU, 1 shared gpu is 6GB in g5
-          command: ["/bin/bash", "-c", "/usr/local/bin/eureka_worker.sh"]
-          env:
-            - name: DISPLAY
-              value: ":0"
-            - name: EUREKA_TRAINING_QUEUE_URL
-              value: "https://sqs.us-east-2.amazonaws.com/126634536477/eureka-msg-queue"
-          volumeMounts:
-            - name: socket-volume
-              mountPath: /tmp/.X11-unix
-              readOnly: False
-            - name: fsx
-              mountPath: /mnt/fsx
-              readOnly: False
-            - name: anaconda3
-              mountPath: /opt/python_env
-          readinessProbe:
-            exec:
-              command:
-                - /usr/local/bin/check_healthy.sh
-            initialDelaySeconds: 0
-            periodSeconds: 5
-      volumes:
-        - name: socket-volume
-          hostPath:
-            path: "/var/addf/dcv-eks/sockets"
-        - name: fsx
-          persistentVolumeClaim:
-            claimName: fsx-claim
-        - name: anaconda3
-          hostPath:
-            path: "/var/addf/anaconda3"
----
-apiVersion: v1
 kind: Pod
 metadata:
-  name: shadow-hand
+  name: humanoid
   labels:
     env: eureka
 spec:
@@ -81,8 +9,8 @@ spec:
   automountServiceAccountToken: true
   restartPolicy: Never
   containers:
-    - name: shadow-hand
-      image: 126634536477.dkr.ecr.us-east-2.amazonaws.com/addf-eks-demo:ubuntu-desktop
+    - name: humanoid
+      image: 126634536477.dkr.ecr.us-east-2.amazonaws.com/addf-eureka-storage-robotic-applications-ecr:ubuntu-ros2
       securityContext:
         privileged: true
         allowPrivilegeEscalation: true
@@ -92,26 +20,28 @@ spec:
       imagePullPolicy: "Always"
       command: ["/bin/bash", "-c", "/usr/local/bin/eureka_controller.sh"]
       env:
+        - name: BUCKET
+          value: "addf-dcv-demo-us-east-2"
         - name: AWS_REGION
           value: "us-east-2"
         - name: DISPLAY
           value: ":0"
         - name: OPENAI_API_KEY
-          value: "OPEN_AI_KEY"
+          value: "<OPENAI_KEY>"
         - name: EUREKA_ENV
-          value: "shadow_hand"
+          value: "humanoid"
         - name: EUREKA_SAMPLE
-          value: "4"
+          value: "8"
         - name: EUREKA_ITERATIONS
-          value: "4"
+          value: "64"
         - name: EUREKA_MAX_ITERATION
-          value: "100"
+          value: "2000"
         - name: EUREKA_MODEL
-          value: "claude-3-sonnet"
+          value: "claude-3-5-sonnet"
         - name: EUREKA_TRAINING_QUEUE_URL
           value: "https://sqs.us-east-2.amazonaws.com/126634536477/eureka-msg-queue"
         - name: EUREKA_NUM_EVAL
-          value: "5"
+          value: "8"
       volumeMounts:
         - name: socket-volume
           mountPath: /tmp/.X11-unix

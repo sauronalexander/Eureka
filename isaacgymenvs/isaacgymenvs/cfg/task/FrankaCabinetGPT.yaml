@@ -14,6 +14,7 @@ env:
   enableCameraSensors: false
   enableDebugVis: false
   envSpacing: 1.5
+  env_name: franka_cabinetGPT
   episodeLength: 500
   fingerDistRewardScale: 5.0
   numEnvs: ${resolve_default:4096,${...num_envs}}

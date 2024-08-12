@@ -116,6 +116,7 @@ def get_rlgames_env_creator(
             module_name = os.getenv("EUREKA_TASK_CODE_MODULE")
             module_name = f"isaacgymenvs.tasks.{module_name}"
             logging.info(f"Training using module {module_name}")
+            module_name = module_name.replace("/", ".")
             module = importlib.import_module(module_name)
             task_caller = getattr(module, task_name)
         except:

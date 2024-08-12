@@ -33,6 +33,7 @@ def import_class_from_file(file_path, function_name):
     return function
 
 def create_env_file(file_path, env_vars):
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "w") as f:
         for key in env_vars.keys():
             f.write(f"export {key}={env_vars[key]}\n")
